@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useNotes } from '../context/NotesContext';
 import { PWAInstallButton } from './PWAInstallButton';
+import { doLogin } from '../actions/login';
 
 export const AuthScreen: React.FC = () => {
   const { loginWithGoogle, authLoading } = useNotes();
@@ -85,7 +86,7 @@ export const AuthScreen: React.FC = () => {
 
           <button
             type="button"
-            onClick={loginWithGoogle}
+            onClick={doLogin}
             disabled={authLoading}
             className="w-full sm:w-auto px-8 py-3.5 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm shadow-xl shadow-white/10 transition active:scale-[0.98] inline-flex items-center justify-center gap-3 cursor-pointer disabled:opacity-60"
           >

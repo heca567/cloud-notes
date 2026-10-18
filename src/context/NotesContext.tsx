@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useTransition } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState, useTransition } from 'react';
 import { 
   collection, 
   query, 
@@ -13,6 +13,7 @@ import {
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { db, auth, googleProvider, signInWithPopup, signOut, handleFirestoreError, OperationType } from '../firebase';
 import type { Note, Folder, ViewFilter, UserProfile } from '../types';
+import { Folder as FolderClass, folderRepo } from '../actions/loadClass';
 
 export type SyncState = 'synced' | 'saving' | 'offline' | 'error';
 
@@ -64,7 +65,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mobileView, setMobileView] = useState<'list' | 'editor'>('list');
   const [, startTransition] = useTransition();
-
+  const FolderRepo = useMemo(() => new FolderClass(), []);
   // Listen to network status
   useEffect(() => {
     const handleOnline = () => {
@@ -108,32 +109,29 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Real-time Firestore sync when authenticated
   useEffect(() => {
-    if (!user) {
-      return;
-    }
+    if (!user) return;
+    let unsubscribeFolders: (() => void) | undefined;
 
-    const foldersPath = 'folders';
-    const foldersQuery = query(collection(db, foldersPath), where('userId', '==', user.uid));
-    
-    const unsubscribeFolders = onSnapshot(
-      foldersQuery,
-      (snapshot) => {
-        const folderList: Folder[] = [];
-        snapshot.forEach((docSnap) => {
-          folderList.push(docSnap.data() as Folder);
+    try {
+        unsubscribeFolders = folderRepo.load({
+            user,
+            onData: (folders) => {
+                startTransition(() => {
+                    setFolders(folders);
+                    setLastSyncTime(new Date());
+                    setSyncState('synced');
+                });
+            },
+            onError: (error) => {
+                setSyncState('error');
+                handleFirestoreError(error, OperationType.LIST, 'folders');
+            }
         });
-        folderList.sort((a, b) => a.name.localeCompare(b.name));
-        startTransition(() => {
-          setFolders(folderList);
-          setLastSyncTime(new Date());
-          setSyncState('synced');
-        });
-      },
-      (error) => {
+    } catch (error) {
         setSyncState('error');
-        handleFirestoreError(error, OperationType.LIST, foldersPath);
-      }
-    );
+        handleFirestoreError(error, OperationType.LIST, 'folders');
+    }
+    
 
     const notesPath = 'notes';
     const notesQuery = query(collection(db, notesPath), where('userId', '==', user.uid));
@@ -176,7 +174,9 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     );
 
     return () => {
-      unsubscribeFolders();
+      if (unsubscribeFolders) {
+        unsubscribeFolders();
+      }
       unsubscribeNotes();
     };
   }, [user]);
