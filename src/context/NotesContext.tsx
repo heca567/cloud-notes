@@ -1,21 +1,11 @@
 import React, { createContext, useContext, useEffect, useMemo, useState, useTransition } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc,
-  serverTimestamp 
-} from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth, googleProvider, signInWithPopup, signOut, handleFirestoreError, OperationType } from '../firebase';
+import { auth, handleFirestoreError, OperationType } from '../firebase';
 import type { Note, Folder, ViewFilter, UserProfile } from '../types';
-import { Folder as FolderClass, folderRepo } from '../actions/loadClass';
+import { folderRepo, notesRepo } from '../actions/loadClass';
+import { addNoteToFirestore, createNewFolder, createNewNote, deleteFolderFromFirestore, deleteNoteFromFirestore, findNoteById, findNoteInFolder, updateFolderInFirestore, updateNoteInFirestore } from '../actions/actions';
 
-export type SyncState = 'synced' | 'saving' | 'offline' | 'error';
+export type SyncState = 'synced' | 'saving' | 'error';
 
 interface NotesContextType {
   user: UserProfile | null;
@@ -33,8 +23,6 @@ interface NotesContextType {
   setActiveFilter: (filter: ViewFilter) => void;
   setSelectedNoteId: (id: string | null) => void;
   setSearchQuery: (query: string) => void;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
   createNote: (folderId?: string) => Promise<string | null>;
   updateNote: (id: string, updates: Partial<Note>) => Promise<void>;
   deleteNote: (id: string, permanent?: boolean) => Promise<void>;
@@ -47,7 +35,6 @@ interface NotesContextType {
 }
 
 const NotesContext = createContext<NotesContextType | null>(null);
-
 function generateId(): string {
   return 'id_' + Math.random().toString(36).substring(2, 11) + Date.now().toString(36);
 }
@@ -65,17 +52,14 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mobileView, setMobileView] = useState<'list' | 'editor'>('list');
   const [, startTransition] = useTransition();
-  const FolderRepo = useMemo(() => new FolderClass(), []);
-  // Listen to network status
+  
+
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
       setSyncState('synced');
     };
-    const handleOffline = () => {
-      setIsOnline(false);
-      setSyncState('offline');
-    };
+    const handleOffline = () => { setIsOnline(false) };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
@@ -109,121 +93,64 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Real-time Firestore sync when authenticated
   useEffect(() => {
+    const handleSyncError = (operationType: OperationType, path: string) => (error: unknown) => {
+      setSyncState('error');
+      handleFirestoreError(error, operationType, path);
+    };
     if (!user) return;
     let unsubscribeFolders: (() => void) | undefined;
 
     try {
-        unsubscribeFolders = folderRepo.load({
-            user,
-            onData: (folders) => {
-                startTransition(() => {
-                    setFolders(folders);
-                    setLastSyncTime(new Date());
-                    setSyncState('synced');
-                });
-            },
-            onError: (error) => {
-                setSyncState('error');
-                handleFirestoreError(error, OperationType.LIST, 'folders');
-            }
-        });
+      unsubscribeFolders = folderRepo.load({
+        user,
+        onData: (folders) => {
+          startTransition(() => {
+            setFolders(folders);
+            setLastSyncTime(new Date());
+            setSyncState('synced');
+          });
+        },
+        onError: handleSyncError(OperationType.LIST, 'folders'),
+      });
     } catch (error) {
-        setSyncState('error');
-        handleFirestoreError(error, OperationType.LIST, 'folders');
+      setSyncState('error');
+      handleFirestoreError(error, OperationType.LIST, 'folders');
     }
-    
 
-    const notesPath = 'notes';
-    const notesQuery = query(collection(db, notesPath), where('userId', '==', user.uid));
 
-    const unsubscribeNotes = onSnapshot(
-      notesQuery,
-      (snapshot) => {
-        const notesList: Note[] = [];
-        snapshot.forEach((docSnap) => {
-          notesList.push(docSnap.data() as Note);
-        });
-
-        // Sort: pinned first, then by updatedAt descending
-        notesList.sort((a, b) => {
-          if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
-          const timeA = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : (a.updatedAt?.seconds ? a.updatedAt.seconds * 1000 : 0);
-          const timeB = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : (b.updatedAt?.seconds ? b.updatedAt.seconds * 1000 : 0);
-          return timeB - timeA;
-        });
-
+    const unsubscribeNotes = notesRepo.load({
+      user,
+      onData: (notes) => {
         startTransition(() => {
-          setNotes(notesList);
+          setNotes(notes);
           setLastSyncTime(new Date());
           setSyncState('synced');
-
-          // Auto-select first note if none selected or if previously selected was deleted
-          setSelectedNoteId((prev) => {
-            if (prev && notesList.some((n) => n.id === prev)) {
-              return prev;
-            }
-            const activeNotes = notesList.filter((n) => !n.isArchived);
-            return activeNotes.length > 0 ? activeNotes[0].id : null;
-          });
         });
       },
-      (error) => {
-        setSyncState('error');
-        handleFirestoreError(error, OperationType.LIST, notesPath);
-      }
-    );
+      onError: handleSyncError(OperationType.LIST, 'notes')
+    });
 
     return () => {
-      if (unsubscribeFolders) {
+      if (unsubscribeFolders && unsubscribeNotes) {
         unsubscribeFolders();
+        unsubscribeNotes();
       }
-      unsubscribeNotes();
     };
   }, [user]);
-
-  const loginWithGoogle = async () => {
-    try {
-      await signInWithPopup(auth, googleProvider);
-    } catch (err) {
-      console.error('Login error:', err);
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await signOut(auth);
-    } catch (err) {
-      console.error('Logout error:', err);
-    }
-  };
 
   const createNote = async (folderId?: string): Promise<string | null> => {
     if (!user) return null;
     setSyncState('saving');
-    const newId = generateId();
-    const effectiveFolderId = folderId !== undefined 
-      ? folderId 
-      : (activeFilter !== 'all' && activeFilter !== 'unorganized' && activeFilter !== 'pinned' && activeFilter !== 'trash' 
-          ? activeFilter 
-          : '');
-
-    const newNote: Note = {
-      id: newId,
-      userId: user.uid,
-      folderId: effectiveFolderId,
-      title: 'Nueva nota',
-      content: '',
-      isPinned: false,
-      isArchived: false,
-      color: '#ffffff',
-      tags: [],
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
+    const effectiveFolderId = folderId !== undefined
+      ? folderId
+      : (activeFilter !== 'all' && activeFilter !== 'unorganized' && activeFilter !== 'pinned' && activeFilter !== 'trash'
+        ? activeFilter
+        : '');
+    const newNote = createNewNote(effectiveFolderId, user.uid);
+    const newId = newNote.id;
     const path = `notes/${newId}`;
     try {
-      await setDoc(doc(db, 'notes', newId), newNote);
+      await addNoteToFirestore(newNote);
       setSelectedNoteId(newId);
       setMobileView('editor');
       setSyncState('synced');
@@ -241,10 +168,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSyncState('saving');
     const path = `notes/${id}`;
     try {
-      await updateDoc(doc(db, 'notes', id), {
-        ...updates,
-        updatedAt: serverTimestamp(),
-      });
+      await updateNoteInFirestore(id, updates);
       setSyncState('synced');
       setLastSyncTime(new Date());
     } catch (err) {
@@ -259,12 +183,9 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const path = `notes/${id}`;
     try {
       if (permanent) {
-        await deleteDoc(doc(db, 'notes', id));
+        await deleteNoteFromFirestore(id);
       } else {
-        await updateDoc(doc(db, 'notes', id), {
-          isArchived: true,
-          updatedAt: serverTimestamp(),
-        });
+        await updateNoteInFirestore(id, { isArchived: true });
       }
       setSyncState('synced');
       setLastSyncTime(new Date());
@@ -279,10 +200,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSyncState('saving');
     const path = `notes/${id}`;
     try {
-      await updateDoc(doc(db, 'notes', id), {
-        isArchived: false,
-        updatedAt: serverTimestamp(),
-      });
+      await updateNoteInFirestore(id, { isArchived: false });
       setSyncState('synced');
       setLastSyncTime(new Date());
     } catch (err) {
@@ -292,7 +210,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const togglePinNote = async (id: string): Promise<void> => {
-    const note = notes.find((n) => n.id === id);
+    const note = findNoteById(notes, id);
     if (!note) return;
     await updateNote(id, { isPinned: !note.isPinned });
   };
@@ -305,19 +223,9 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!user) return null;
     setSyncState('saving');
     const newId = generateId();
-    const newFolder: Folder = {
-      id: newId,
-      userId: user.uid,
-      name: name.trim() || 'Nueva Carpeta',
-      color,
-      icon,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    };
-
     const path = `folders/${newId}`;
     try {
-      await setDoc(doc(db, 'folders', newId), newFolder);
+      await createNewFolder(name, color, icon, user.uid, newId);
       setActiveFilter(newId);
       setSyncState('synced');
       setLastSyncTime(new Date());
@@ -334,12 +242,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSyncState('saving');
     const path = `folders/${id}`;
     try {
-      await updateDoc(doc(db, 'folders', id), {
-        name: name.trim(),
-        color,
-        icon,
-        updatedAt: serverTimestamp(),
-      });
+      await updateFolderInFirestore(id, { name, color, icon });
       setSyncState('synced');
       setLastSyncTime(new Date());
     } catch (err) {
@@ -353,7 +256,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSyncState('saving');
 
     // Handle notes belonging to this folder
-    const notesInFolder = notes.filter((n) => n.folderId === id);
+    const notesInFolder = findNoteInFolder(notes, id);
     if (moveNotesToRoot) {
       for (const note of notesInFolder) {
         await updateNote(note.id, { folderId: '' });
@@ -366,7 +269,7 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const path = `folders/${id}`;
     try {
-      await deleteDoc(doc(db, 'folders', id));
+      await deleteFolderFromFirestore(id);
       if (activeFilter === id) {
         setActiveFilter('all');
       }
@@ -396,8 +299,6 @@ export const NotesProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setActiveFilter,
         setSelectedNoteId,
         setSearchQuery,
-        loginWithGoogle,
-        logout,
         createNote,
         updateNote,
         deleteNote,

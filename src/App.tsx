@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { NotesProvider, useNotes } from './context/NotesContext';
 import { AuthProvider } from '../auth/auth';
 import { Sidebar } from './components/Sidebar';
@@ -6,10 +6,12 @@ import { NoteList } from './components/NoteList';
 import { NoteEditor } from './components/NoteEditor';
 import { AuthScreen } from './components/AuthScreen';
 import { Cloud, Loader2 } from 'lucide-react';
+import { NoteContext, NoteSelectorProvider } from './actions/noteSelector';
 
 const Workspace: React.FC = () => {
   const { user, authLoading, createNote, mobileView } = useNotes();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const value = useContext(NoteContext);
 
   // Global keyboard shortcuts
   useEffect(() => {
@@ -53,6 +55,8 @@ const Workspace: React.FC = () => {
 
       {/* Note List column: on mobile, show if mobileView === 'list', hide if mobileView === 'editor' */}
       <div className={`h-full ${mobileView === 'editor' ? 'hidden md:flex' : 'flex w-full md:w-80 lg:w-96'} shrink-0`}>
+        <div>El estado de las notas es</div>
+        <pre>{JSON.stringify(value.notesStatus, null, 2)}</pre>
         <NoteList
           onOpenMobileSidebar={() => setIsMobileSidebarOpen(true)}
         />
@@ -70,7 +74,9 @@ export default function App() {
   return (
     <AuthProvider>
       <NotesProvider>
-        <Workspace />
+        <NoteSelectorProvider>
+          <Workspace />
+        </NoteSelectorProvider>
       </NotesProvider>
     </AuthProvider>
   );
