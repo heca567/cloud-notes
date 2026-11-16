@@ -1,0 +1,1 @@
+se empezo la refactorizacion ahorita estoy refactorizando la capa de datos con un zustand use un repositorio que crea una subscripcion como useefecct no una async/await puse dos formulas como para metros que manejan el errro y el exito 

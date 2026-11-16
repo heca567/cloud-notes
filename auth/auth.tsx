@@ -84,14 +84,15 @@ export const AuthProvider: React.FC<{ value?: any; children: React.ReactNode }> 
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  const actions = context?.actions;
-  const session = context?.session ?? null;
+  if (!context) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
 
   return {
-    session,
-    loginWithGoogle: actions?.loginWithGoogle,
-    logout: actions?.logout,
-    logSession: actions?.logSession || (async () => {}),
-    getSession: actions?.getSession || (() => session),
+    session: context.session,
+    loginWithGoogle: context.actions.loginWithGoogle,
+    logout: context.actions.logout,
+    logSession: context.actions.logSession,
+    getSession: context.actions.getSession,
   };
 };

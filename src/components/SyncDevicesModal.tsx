@@ -10,11 +10,9 @@ import {
   X, 
   RefreshCw, 
   ExternalLink,
-  ShieldCheck,
-  Download
+  ShieldCheck
 } from 'lucide-react';
 import { useNotes } from '../context/NotesContext';
-import { PWAInstallButton } from './PWAInstallButton';
 
 interface SyncDevicesModalProps {
   isOpen: boolean;
@@ -22,7 +20,7 @@ interface SyncDevicesModalProps {
 }
 
 export const SyncDevicesModal: React.FC<SyncDevicesModalProps> = ({ isOpen, onClose }) => {
-  const { user, syncState, lastSyncTime, isOnline } = useNotes();
+  const { state } = useNotes();
   const [copied, setCopied] = useState(false);
 
   if (!isOpen) return null;
@@ -65,11 +63,11 @@ export const SyncDevicesModal: React.FC<SyncDevicesModalProps> = ({ isOpen, onCl
               <span className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Estado de la nube</span>
               <div className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full ${
-                  syncState === 'saving' ? 'bg-amber-500 animate-ping' :
-                  isOnline ? 'bg-emerald-500' : 'bg-red-500'
+                  state.syncState === 'saving' ? 'bg-amber-500 animate-ping' :
+                  state.isOnline ? 'bg-emerald-500' : 'bg-red-500'
                 }`} />
                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                  {syncState === 'saving' ? 'Sincronizando...' : isOnline ? 'Conectado (En vivo)' : 'Modo fuera de línea'}
+                  {state.syncState === 'saving' ? 'Sincronizando...' : state.isOnline ? 'Conectado (En vivo)' : 'Modo fuera de línea'}
                 </span>
               </div>
             </div>
@@ -79,7 +77,7 @@ export const SyncDevicesModal: React.FC<SyncDevicesModalProps> = ({ isOpen, onCl
               <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200">
                 <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
                 <span>
-                  {lastSyncTime ? lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Ahora'}
+                  {state.lastSyncTime ? state.lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'Ahora'}
                 </span>
               </div>
             </div>
@@ -114,7 +112,7 @@ export const SyncDevicesModal: React.FC<SyncDevicesModalProps> = ({ isOpen, onCl
               </div>
             </div>
             <p className="text-xs text-indigo-800/80 dark:text-indigo-300/80 mt-2 text-center">
-              Cualquier cambio que hagas se reflejará al instante en tus demás pantallas conectadas a <b>{user?.email || 'tu cuenta'}</b>.
+              Cualquier cambio que hagas se reflejará al instante en tus demás pantallas conectadas a <b>{state.logged?.email || 'tu cuenta'}</b>.
             </p>
           </div>
 
@@ -145,9 +143,6 @@ export const SyncDevicesModal: React.FC<SyncDevicesModalProps> = ({ isOpen, onCl
           </div>
 
           <div className="flex items-center justify-between pt-2">
-            <div>
-              <PWAInstallButton variant="banner" />
-            </div>
             <button
               type="button"
               onClick={onClose}

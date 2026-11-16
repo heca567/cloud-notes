@@ -15,6 +15,7 @@ import {
   Wifi, 
   WifiOff, 
   ChevronRight,
+  PanelLeftClose,
   Folder as DefaultFolderIcon,
   X,
   LogIn
@@ -23,29 +24,32 @@ import { useNotes } from '../context/NotesContext';
 import { useAuth } from '../../auth/auth';
 import { FOLDER_ICONS, FolderModal } from './FolderModal';
 import { SyncDevicesModal } from './SyncDevicesModal';
-import { PWAInstallButton } from './PWAInstallButton';
 import type { Folder } from '../types';
 
 interface SidebarProps {
   isMobileOpen: boolean;
   setIsMobileOpen: (open: boolean) => void;
+  isDesktopCollapsed: boolean;
+  onToggleDesktop: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen }) => {
+export const Sidebar: React.FC<SidebarProps> = ({
+  isMobileOpen,
+  setIsMobileOpen,
+  isDesktopCollapsed,
+  onToggleDesktop,
+}) => {
   const {
-    user,
     notes,
+    state,
     folders,
-    activeFilter,
-    syncState,
-    isOnline,
     setActiveFilter,
+    setMobileView,
     createNote,
     createFolder,
     updateFolder,
     deleteFolder,
     logout,
-    setMobileView,
   } = useNotes();
   const { logSession, session } = useAuth();
 
@@ -113,9 +117,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
 
       {/* Sidebar container */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 text-slate-200 flex flex-col transition-transform duration-300 ease-in-out border-r border-slate-800 ${
+        className={`fixed md:static inset-y-0 left-0 z-40 w-72 bg-slate-900 text-slate-200 flex flex-col transition-[transform,width,opacity] duration-300 ease-in-out border-r border-slate-800 overflow-hidden ${
           isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        } ${isDesktopCollapsed ? 'md:w-0 md:border-r-0 md:opacity-0 md:pointer-events-none' : 'md:w-72'}`}
       >
         {/* App Header */}
         <div className="p-4 flex items-center justify-between border-b border-slate-800/80">
@@ -137,8 +141,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
           <button
             onClick={() => setIsMobileOpen(false)}
             className="md:hidden p-1.5 text-slate-400 hover:text-white rounded-lg"
+            aria-label="Cerrar menú"
           >
             <X className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleDesktop}
+            className="hidden md:block p-1.5 text-slate-400 hover:text-white rounded-lg transition"
+            title="Colapsar barra lateral"
+            aria-label="Colapsar barra lateral"
+          >
+            <PanelLeftClose className="w-5 h-5" />
           </button>
         </div>
 
@@ -151,29 +165,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
           >
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2">
-                {syncState === 'saving' ? (
+                {state.syncState === 'saving' ? (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
-                ) : isOnline ? (
+                ) : state.isOnline ? (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
                 ) : (
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-red-400"></span>
                 )}
-                {syncState === 'saving' && <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>}
+                {state.syncState === 'saving' && <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>}
               </span>
               <span className="text-slate-300 font-medium">
-                {syncState === 'saving' ? 'Guardando cambios...' : isOnline ? 'Nube sincronizada' : 'Sin conexión'}
+                {state.syncState === 'saving' ? 'Guardando cambios...' : state.isOnline ? 'Nube sincronizada' : 'Sin conexión'}
               </span>
             </div>
             <div className="flex items-center gap-1 text-slate-400 group-hover:text-blue-400">
-              {isOnline ? <Wifi className="w-3.5 h-3.5 text-emerald-400" /> : <WifiOff className="w-3.5 h-3.5 text-red-400" />}
+              {state.isOnline ? <Wifi className="w-3.5 h-3.5 text-emerald-400" /> : <WifiOff className="w-3.5 h-3.5 text-red-400" />}
               <ChevronRight className="w-3.5 h-3.5" />
             </div>
           </button>
-        </div>
-
-        {/* PWA Install Button */}
-        <div className="px-4 pb-1">
-          <PWAInstallButton variant="sidebar" />
         </div>
 
         {/* Action: New Note Button */}
@@ -195,7 +204,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
             <button
               onClick={() => handleSelectFilter('all')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition ${
-                activeFilter === 'all'
+                state.activeFilter === 'all'
                   ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30 font-semibold'
                   : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
               }`}
@@ -212,7 +221,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
             <button
               onClick={() => handleSelectFilter('pinned')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition ${
-                activeFilter === 'pinned'
+                state.activeFilter === 'pinned'
                   ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold'
                   : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
               }`}
@@ -229,7 +238,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
             <button
               onClick={() => handleSelectFilter('unorganized')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition ${
-                activeFilter === 'unorganized'
+                state.activeFilter === 'unorganized'
                   ? 'bg-slate-700/60 text-white font-semibold'
                   : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
               }`}
@@ -246,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
             <button
               onClick={() => handleSelectFilter('trash')}
               className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm font-medium transition ${
-                activeFilter === 'trash'
+                state.activeFilter === 'trash'
                   ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30 font-semibold'
                   : 'text-slate-400 hover:bg-slate-800/60 hover:text-slate-200'
               }`}
@@ -307,7 +316,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
                 {folders.map((folder) => {
                   const count = activeNotes.filter((n) => n.folderId === folder.id).length;
                   const IconComp = FOLDER_ICONS[folder.icon] || DefaultFolderIcon;
-                  const isSelected = activeFilter === folder.id;
+                  const isSelected = state.activeFilter === folder.id;
 
                   return (
                     <div key={folder.id} className="relative group">
@@ -381,23 +390,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, setIsMobileOpen 
         <div className="p-3 border-t border-slate-800/80 bg-slate-950/50">
           <div className="flex items-center justify-between gap-3 p-2 rounded-xl bg-slate-800/40">
             <div className="flex items-center gap-2.5 truncate">
-              {user?.photoURL ? (
+              {state.logged?.photoURL ? (
                 <img
-                  src={user.photoURL}
-                  alt={user.displayName || 'Usuario'}
+                  src={state.logged.photoURL}
+                  alt={state.logged.displayName || 'Usuario'}
                   className="w-8 h-8 rounded-full border border-slate-700 shrink-0"
                 />
               ) : (
                 <div className="w-8 h-8 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-xs shrink-0">
-                  {user?.displayName ? user.displayName.charAt(0).toUpperCase() : 'U'}
+                  {state.logged?.displayName ? state.logged.displayName.charAt(0).toUpperCase() : 'U'}
                 </div>
               )}
               <div className="truncate">
                 <p className="text-xs font-semibold text-white truncate">
-                  {user?.displayName || 'Usuario'}
+                  {state.logged?.displayName || 'Usuario'}
                 </p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {user?.email || 'Conectado'}
+                  {state.logged?.email || 'Conectado'}
                 </p>
               </div>
             </div>

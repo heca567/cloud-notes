@@ -1,0 +1,38 @@
+{
+    "folders": [
+    {
+        "color": "#3b82f6",
+        "id": "id_08i98cewtmvs9yleh",
+        "name": "adsad",
+        "createdAt": {
+            "type": "firestore/timestamp/1.0",
+            "seconds": 1793201647,
+            "nanoseconds": 764000000
+        },
+        "userId": "gsvWfDzKkOfcdNlyB6wlyISZOWG3",
+        "icon": "folder",
+        "updatedAt": {
+            "type": "firestore/timestamp/1.0",
+            "seconds": 1793201647,
+            "nanoseconds": 764000000
+        }
+    },
+    {
+        "color": "#3b82f6",
+        "id": "id_fcn5qbppsmvsa16sa",
+        "updatedAt": {
+            "type": "firestore/timestamp/1.0",
+            "seconds": 1793201768,
+            "nanoseconds": 192000000
+        },
+        "userId": "gsvWfDzKkOfcdNlyB6wlyISZOWG3",
+        "name": "google",
+        "icon": "folder",
+        "createdAt": {
+            "type": "firestore/timestamp/1.0",
+            "seconds": 1793201768,
+            "nanoseconds": 192000000
+        }
+    }
+]
+}
